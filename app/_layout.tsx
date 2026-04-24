@@ -7,10 +7,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useUniwind } from 'uniwind';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export default function RootLayout() {
   const { theme } = useUniwind();
@@ -18,7 +15,10 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={NAV_THEME[theme ?? 'light']}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      <Stack />
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="log/[date]" options={{ headerShown: false }} />
+      </Stack>
       <PortalHost />
     </ThemeProvider>
   );
