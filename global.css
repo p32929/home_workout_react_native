@@ -1,7 +1,11 @@
 @import "tailwindcss";
 @import "uniwind";
 
-@import "tw-animate-css"; 
+@import "tw-animate-css";
+
+@source "./app/**/*.{ts,tsx}";
+@source "./components/**/*.{ts,tsx}";
+@source "./lib/**/*.{ts,tsx}";
 
 @theme {
   --radius: 10px;
