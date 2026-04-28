@@ -8,7 +8,7 @@ interface AlertDialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  cancelLabel?: string;
+  cancelLabel?: string | null;
   actionLabel?: string;
   onAction: () => void;
 }
@@ -18,7 +18,7 @@ export function AlertDialog({
   onOpenChange,
   title,
   description,
-  cancelLabel = 'Cancel',
+  cancelLabel = 'Cancel' as string | null,
   actionLabel = 'Continue',
   onAction,
 }: AlertDialogProps) {
@@ -61,18 +61,20 @@ export function AlertDialog({
             </AlertDialogPrimitive.Description>
 
             <View className="flex-row gap-3 mt-6">
-              <AlertDialogPrimitive.Cancel
-                style={{
-                  flex: 1,
-                  backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5',
-                  borderRadius: 12,
-                  paddingVertical: 13,
-                  alignItems: 'center',
-                }}>
-                <Text style={{ color: isDark ? '#a3a3a3' : '#525252', fontSize: 14, fontWeight: '600' }}>
-                  {cancelLabel}
-                </Text>
-              </AlertDialogPrimitive.Cancel>
+              {cancelLabel != null && (
+                <AlertDialogPrimitive.Cancel
+                  style={{
+                    flex: 1,
+                    backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5',
+                    borderRadius: 12,
+                    paddingVertical: 13,
+                    alignItems: 'center',
+                  }}>
+                  <Text style={{ color: isDark ? '#a3a3a3' : '#525252', fontSize: 14, fontWeight: '600' }}>
+                    {cancelLabel}
+                  </Text>
+                </AlertDialogPrimitive.Cancel>
+              )}
 
               <AlertDialogPrimitive.Action
                 onPress={onAction}

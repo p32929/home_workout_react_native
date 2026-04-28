@@ -1,7 +1,7 @@
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Text } from '@/components/ui/text';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { deleteWorkoutLog, getExercises, getWorkoutLog, saveWorkoutLog } from '@/lib/storage';
+import { deleteWorkoutLog, getExercises, getWorkoutLog, saveWorkoutLog, getAllWorkoutLogs } from '@/lib/storage';
 import type { Exercise, ExerciseLog, SetEntry } from '@/lib/types';
 import { formatDisplayDate, parseDateKey } from '@/lib/utils';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -38,6 +38,8 @@ export default function LogScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [clearDialog, setClearDialog] = useState(false);
+  const [legendDialog, setLegendDialog] = useState(false);
+  const [prevLogs, setPrevLogs] = useState<Record<string, ExerciseLog>>({});
   const logDataRef = useRef<LogData>({});
 
   // Keep ref in sync for use inside closures
@@ -47,9 +49,10 @@ export default function LogScreen() {
 
   useEffect(() => {
     async function load() {
-      const [exs, existingLog] = await Promise.all([
+      const [exs, existingLog, allLogs] = await Promise.all([
         getExercises(),
         getWorkoutLog(date),
+        getAllWorkoutLogs(),
       ]);
       setExercises(exs);
 
@@ -65,6 +68,26 @@ export default function LogScreen() {
         setLogData(data);
         setExpanded(expandedSet);
       }
+
+      // Compute prevLogs: for each exercise, find the most recent log before `date`
+      const sortedDates = Object.keys(allLogs)
+        .filter(d => d < date)
+        .sort((a, b) => (a > b ? -1 : 1)); // descending
+
+      const computed: Record<string, ExerciseLog> = {};
+      for (const ex of exs) {
+        for (const d of sortedDates) {
+          const log = allLogs[d];
+          const entry = log.exercises.find(
+            e => e.exerciseId === ex.id && e.sets.length > 0,
+          );
+          if (entry) {
+            computed[ex.id] = entry;
+            break;
+          }
+        }
+      }
+      setPrevLogs(computed);
 
       setLoading(false);
     }
@@ -180,7 +203,7 @@ export default function LogScreen() {
     <SafeAreaView style={{ flex: 1 }} className="bg-background" edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        behavior="padding">
         {/* Header */}
         <View
           style={{ borderBottomWidth: 1, borderBottomColor: borderColor }}
@@ -220,6 +243,7 @@ export default function LogScreen() {
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
             contentContainerStyle={{ padding: 16, paddingBottom: 24, gap: 10 }}>
             {exercises.map(ex => {
               const sets = logData[ex.id] ?? [];
@@ -227,6 +251,8 @@ export default function LogScreen() {
               const filledSets = sets.filter(s =>
                 Object.values(s).some(v => v.trim() !== ''),
               );
+
+              const prevEntry = prevLogs[ex.id];
 
               return (
                 <View
@@ -242,6 +268,30 @@ export default function LogScreen() {
                       <Text style={{ color: mutedColor, fontSize: 12 }} className="mt-0.5">
                         {ex.units.map(u => u.name).join(' · ')}
                       </Text>
+                      {prevEntry && (() => {
+                        const setCount = prevEntry.sets.length;
+                        const stats = ex.units.map(u => {
+                          const vals = prevEntry.sets.map(s => parseFloat(s[u.id] ?? '') || 0);
+                          const max = Math.max(...vals);
+                          const total = vals.reduce((a, b) => a + b, 0);
+                          return { name: u.name.toLowerCase(), max, total };
+                        }).filter(s => s.total > 0);
+                        if (stats.length === 0) return null;
+                        const parts = [
+                          `× ${setCount} sets`,
+                          ...stats.flatMap(s => [
+                            `↑ ${s.max} ${s.name}`,
+                            `∑ ${s.total} ${s.name}`,
+                          ]),
+                        ];
+                        return (
+                          <TouchableOpacity onPress={() => setLegendDialog(true)} activeOpacity={0.6} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                            <Text style={{ color: isDark ? '#6366f1' : '#6366f1', fontSize: 12, fontWeight: '500', marginTop: 4, lineHeight: 18 }}>
+                              {parts.join('   ')}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })()}
                     </View>
                     <View className="flex-row items-center gap-2">
                       {filledSets.length > 0 && (
@@ -269,53 +319,53 @@ export default function LogScreen() {
                   {isOpen && (
                     <View style={{ borderTopWidth: 1, borderTopColor: borderColor }}>
                       {sets.map((set, si) => (
-                        <View
-                          key={si}
-                          style={{
-                            backgroundColor: rowBg,
-                            padding: 12,
-                            borderTopWidth: si > 0 ? 1 : 0,
-                            borderTopColor: borderColor,
-                          }}>
-                          {/* Set label + delete */}
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                            <Text style={{ color: mutedColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>
-                              SET {si + 1}
-                            </Text>
-                            <TouchableOpacity onPress={() => removeSet(ex.id, si)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                              <Trash2Icon size={14} color={mutedColor} />
-                            </TouchableOpacity>
-                          </View>
+                          <View
+                            key={si}
+                            style={{
+                              backgroundColor: rowBg,
+                              padding: 12,
+                              borderTopWidth: si > 0 ? 1 : 0,
+                              borderTopColor: borderColor,
+                            }}>
+                            {/* Set label + delete */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                              <Text style={{ color: mutedColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>
+                                SET {si + 1}
+                              </Text>
+                              <TouchableOpacity onPress={() => removeSet(ex.id, si)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <Trash2Icon size={14} color={mutedColor} />
+                              </TouchableOpacity>
+                            </View>
 
-                          {/* Unit label + input pairs, side by side */}
-                          <View style={{ flexDirection: 'row', gap: 10 }}>
-                            {ex.units.map(u => (
-                              <View key={u.id} style={{ flex: 1 }}>
-                                <Text style={{ color: mutedColor, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>
-                                  {u.name}
-                                </Text>
-                                <TextInput
-                                  value={set[u.id] ?? ''}
-                                  onChangeText={val => updateSet(ex.id, si, u.id, val)}
-                                  keyboardType="decimal-pad"
-                                  placeholder="—"
-                                  placeholderTextColor={placeholderColor}
-                                  style={{
-                                    backgroundColor: inputBg,
-                                    color: inputColor,
-                                    borderRadius: 10,
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 11,
-                                    fontSize: 18,
-                                    fontWeight: '700',
-                                    textAlign: 'center',
-                                  }}
-                                />
-                              </View>
-                            ))}
+                            {/* Unit label + input per column */}
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                              {ex.units.map(u => (
+                                <View key={u.id} style={{ flex: 1 }}>
+                                  <Text style={{ color: mutedColor, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>
+                                    {u.name}
+                                  </Text>
+                                  <TextInput
+                                    value={set[u.id] ?? ''}
+                                    onChangeText={val => updateSet(ex.id, si, u.id, val)}
+                                    keyboardType="decimal-pad"
+                                    placeholder="—"
+                                    placeholderTextColor={placeholderColor}
+                                    style={{
+                                      backgroundColor: inputBg,
+                                      color: inputColor,
+                                      borderRadius: 10,
+                                      paddingHorizontal: 10,
+                                      paddingVertical: 11,
+                                      fontSize: 18,
+                                      fontWeight: '700',
+                                      textAlign: 'center',
+                                    }}
+                                  />
+                                </View>
+                              ))}
+                            </View>
                           </View>
-                        </View>
-                      ))}
+                        ))}
 
                       {/* Add set button */}
                       <TouchableOpacity
@@ -390,6 +440,16 @@ export default function LogScreen() {
         cancelLabel="Cancel"
         actionLabel="Clear"
         onAction={confirmClearDay}
+      />
+
+      <AlertDialog
+        open={legendDialog}
+        onOpenChange={setLegendDialog}
+        title="What do these mean?"
+        description={`These stats are from your last session for this exercise.\n\n× sets — how many sets you did\n↑ value — your best (highest) value in a single set\n∑ value — your total across all sets`}
+        cancelLabel={null}
+        actionLabel="Got it"
+        onAction={() => setLegendDialog(false)}
       />
     </SafeAreaView>
   );

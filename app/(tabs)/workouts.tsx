@@ -6,23 +6,159 @@ import { getExercises, saveExercises, getAllWorkoutLogs } from '@/lib/storage';
 import type { Exercise, Unit } from '@/lib/types';
 import { generateId } from '@/lib/utils';
 import { useFocusEffect } from 'expo-router';
-import { DownloadIcon, MoreHorizontalIcon, PlusIcon, Trash2Icon, UploadIcon, XIcon } from 'lucide-react-native';
-import { useCallback, useState } from 'react';
+import { DownloadIcon, GripVerticalIcon, MoreHorizontalIcon, PlusIcon, Trash2Icon, UploadIcon, XIcon } from 'lucide-react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import { useUniwind } from 'uniwind';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
+import type { SharedValue } from 'react-native-reanimated';
+
+// ─── ExerciseItem ────────────────────────────────────────────────────────────
+
+interface ExerciseItemProps {
+  ex: Exercise;
+  draggingIdShared: SharedValue<string>;
+  dragY: SharedValue<number>;
+  isDark: boolean;
+  iconColor: string;
+  placeholderColor: string;
+  onEdit: () => void;
+  onDelete: () => void;
+  onDragStart: () => void;
+  onFinalizeDrag: (exId: string, translationY: number) => void;
+  onItemLayout: (height: number) => void;
+}
+
+function ExerciseItem({
+  ex,
+  draggingIdShared,
+  dragY,
+  isDark,
+  iconColor,
+  placeholderColor,
+  onEdit,
+  onDelete,
+  onDragStart,
+  onFinalizeDrag,
+  onItemLayout,
+}: ExerciseItemProps) {
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activateAfterLongPress(250)
+        .onStart(() => {
+          draggingIdShared.value = ex.id;
+          dragY.value = 0;
+          runOnJS(onDragStart)();
+        })
+        .onUpdate(e => {
+          dragY.value = e.translationY;
+        })
+        .onFinalize(e => {
+          const finalY = e.translationY;
+          const exId = ex.id;
+          draggingIdShared.value = '';
+          dragY.value = 0;
+          runOnJS(onFinalizeDrag)(exId, finalY);
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ex.id],
+  );
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const isDragging = draggingIdShared.value === ex.id;
+    return {
+      transform: [{ translateY: isDragging ? dragY.value : 0 }],
+      zIndex: isDragging ? 100 : 1,
+      elevation: isDragging ? 8 : 0,
+    };
+  });
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <Animated.View
+        style={[animatedStyle]}
+        onLayout={e => onItemLayout(e.nativeEvent.layout.height)}>
+        <TouchableOpacity
+          onPress={onEdit}
+          activeOpacity={0.7}
+          style={{
+            backgroundColor: isDark ? '#111111' : '#ffffff',
+            borderRadius: 16,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: isDark ? '#262626' : '#e5e5e5',
+          }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            {/* Drag handle */}
+            <View style={{ justifyContent: 'center', paddingRight: 10, paddingTop: 2 }}>
+              <GripVerticalIcon size={18} color={placeholderColor} />
+            </View>
+
+            <View style={{ flex: 1, gap: 8 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: '600',
+                  color: isDark ? '#e5e5e5' : '#0a0a0a',
+                }}>
+                {ex.name}
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {ex.units.map(u => (
+                  <View
+                    key={u.id}
+                    style={{
+                      backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5',
+                      borderRadius: 100,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }}>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '500',
+                        color: isDark ? '#a3a3a3' : '#525252',
+                      }}>
+                      {u.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={onDelete}
+              style={{ padding: 6, marginLeft: 8 }}>
+              <Trash2Icon size={16} color={placeholderColor} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+// ─── WorkoutsScreen ──────────────────────────────────────────────────────────
 
 export default function WorkoutsScreen() {
   const { theme } = useUniwind();
   const isDark = theme === 'dark';
+  const insets = useSafeAreaInsets();
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -37,17 +173,55 @@ export default function WorkoutsScreen() {
   const [resetInput, setResetInput] = useState('');
   const [resetError, setResetError] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [name, setName] = useState('');
   const [selectedUnits, setSelectedUnits] = useState<Unit[]>([]);
   const [customUnitText, setCustomUnitText] = useState('');
   const [formError, setFormError] = useState('');
   const [unitDropdownOpen, setUnitDropdownOpen] = useState(false);
+  const [category, setCategory] = useState('');
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+
+  // Drag-to-reorder
+  const exercisesRef = useRef<Exercise[]>([]);
+  const draggingIdShared = useSharedValue('');
+  const dragY = useSharedValue(0);
+  const itemHeightsRef = useRef<Record<string, number>>({});
+
+  // Keep exercisesRef in sync
+  useCallback(() => {
+    exercisesRef.current = exercises;
+  }, [exercises]);
+
+  // Proper sync via a side effect pattern: update ref whenever exercises change
+  // We use a ref-based approach without useEffect to avoid import
+  exercisesRef.current = exercises;
 
   useFocusEffect(
     useCallback(() => {
       getExercises().then(setExercises);
     }, []),
   );
+
+  const existingCategories = useMemo(
+    () => [...new Set(exercises.map(e => e.category).filter(Boolean) as string[])],
+    [exercises],
+  );
+
+  const groupedExercises = useMemo(() => {
+    const sections: Array<{ title: string | null; items: Exercise[] }> = [];
+    const uncategorized = exercises.filter(e => !e.category);
+    if (uncategorized.length > 0) sections.push({ title: null, items: uncategorized });
+    const seen = new Set<string>();
+    for (const ex of exercises) {
+      if (!ex.category) continue;
+      if (!seen.has(ex.category)) {
+        seen.add(ex.category);
+        sections.push({ title: ex.category, items: exercises.filter(e => e.category === ex.category) });
+      }
+    }
+    return sections;
+  }, [exercises]);
 
   function openAdd() {
     setEditingId(null);
@@ -56,6 +230,8 @@ export default function WorkoutsScreen() {
     setCustomUnitText('');
     setFormError('');
     setUnitDropdownOpen(false);
+    setCategory('');
+    setCategoryDropdownOpen(false);
     setModalVisible(true);
   }
 
@@ -66,6 +242,8 @@ export default function WorkoutsScreen() {
     setCustomUnitText('');
     setFormError('');
     setUnitDropdownOpen(false);
+    setCategory(ex.category ?? '');
+    setCategoryDropdownOpen(false);
     setModalVisible(true);
   }
 
@@ -73,6 +251,7 @@ export default function WorkoutsScreen() {
     setModalVisible(false);
     setFormError('');
     setUnitDropdownOpen(false);
+    setCategoryDropdownOpen(false);
   }
 
   function removeUnit(id: string) {
@@ -111,18 +290,22 @@ export default function WorkoutsScreen() {
     }
     setFormError('');
 
+    const trimmedCategory = category.trim();
     const all = await getExercises();
     let updated: Exercise[];
 
     if (editingId) {
       updated = all.map(e =>
-        e.id === editingId ? { ...e, name: trimmedName, units } : e,
+        e.id === editingId
+          ? { ...e, name: trimmedName, units, category: trimmedCategory || undefined }
+          : e,
       );
     } else {
       const newEx: Exercise = {
         id: generateId(),
         name: trimmedName,
         units,
+        category: trimmedCategory || undefined,
         createdAt: new Date().toISOString(),
       };
       updated = [...all, newEx];
@@ -206,11 +389,39 @@ export default function WorkoutsScreen() {
       setResetError(true);
       return;
     }
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-    await AsyncStorage.multiRemove(['@wt/exercises', '@wt/logs']);
-    setExercises([]);
-    setResetOpen(false);
+    setResetting(true);
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.multiRemove(['@wt/exercises', '@wt/logs']);
+      setExercises([]);
+    } finally {
+      setResetting(false);
+      setResetOpen(false);
+    }
   }
+
+  const handleDragStart = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
+  const handleFinalizeDrag = useCallback((exId: string, translationY: number) => {
+    const exs = exercisesRef.current;
+    const currentIndex = exs.findIndex(e => e.id === exId);
+    if (currentIndex < 0) return;
+    const heights = Object.values(itemHeightsRef.current);
+    const avg =
+      heights.length > 0
+        ? heights.reduce((a, b) => a + b, 0) / heights.length + 12
+        : 88;
+    const steps = Math.round(translationY / avg);
+    if (steps === 0) return;
+    const targetIndex = Math.max(0, Math.min(exs.length - 1, currentIndex + steps));
+    const newExs = [...exs];
+    const [removed] = newExs.splice(currentIndex, 1);
+    newExs.splice(targetIndex, 0, removed);
+    setExercises(newExs);
+    saveExercises(newExs);
+  }, []);
 
   const iconColor = isDark ? '#e5e5e5' : '#171717';
   const inputBg = isDark ? '#1a1a1a' : '#f5f5f5';
@@ -218,6 +429,7 @@ export default function WorkoutsScreen() {
   const placeholderColor = isDark ? '#525252' : '#a3a3a3';
   const borderColor = isDark ? '#262626' : '#e5e5e5';
   const sheetBg = isDark ? '#111111' : '#ffffff';
+  const mutedColor = isDark ? '#525252' : '#a3a3a3';
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -241,7 +453,7 @@ export default function WorkoutsScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}>
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 88 }}>
         {exercises.length === 0 ? (
           <View className="items-center justify-center py-24 gap-3">
             <View className="w-16 h-16 rounded-full bg-secondary items-center justify-center">
@@ -253,36 +465,44 @@ export default function WorkoutsScreen() {
             </Text>
           </View>
         ) : (
-          <View className="gap-3">
-            {exercises.map(ex => (
-              <TouchableOpacity
-                key={ex.id}
-                onPress={() => openEdit(ex)}
-                onLongPress={() => deleteExercise(ex)}
-                activeOpacity={0.7}
-                className="bg-card border border-border rounded-2xl p-4">
-                <View className="flex-row items-start justify-between">
-                  <View className="flex-1 gap-2">
-                    <Text className="text-base font-semibold text-foreground">{ex.name}</Text>
-                    <View className="flex-row flex-wrap gap-1.5">
-                      {ex.units.map(u => (
-                        <View
-                          key={u.id}
-                          className="bg-secondary rounded-full px-2.5 py-1">
-                          <Text className="text-xs font-medium text-muted-foreground">
-                            {u.name}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => deleteExercise(ex)}
-                    className="p-1.5 ml-2">
-                    <Trash2Icon size={16} color={placeholderColor} />
-                  </TouchableOpacity>
+          <View style={{ gap: 12 }}>
+            {groupedExercises.map(section => (
+              <View key={section.title ?? '__uncategorized__'}>
+                {section.title !== null && (
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: 1,
+                      color: mutedColor,
+                      marginBottom: 8,
+                      marginTop: 12,
+                    }}>
+                    {section.title}
+                  </Text>
+                )}
+                <View style={{ gap: 10 }}>
+                  {section.items.map(ex => (
+                    <ExerciseItem
+                      key={ex.id}
+                      ex={ex}
+                      draggingIdShared={draggingIdShared}
+                      dragY={dragY}
+                      isDark={isDark}
+                      iconColor={iconColor}
+                      placeholderColor={placeholderColor}
+                      onEdit={() => openEdit(ex)}
+                      onDelete={() => deleteExercise(ex)}
+                      onDragStart={handleDragStart}
+                      onFinalizeDrag={handleFinalizeDrag}
+                      onItemLayout={h => {
+                        itemHeightsRef.current[ex.id] = h;
+                      }}
+                    />
+                  ))}
                 </View>
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -294,8 +514,10 @@ export default function WorkoutsScreen() {
         animationType="slide"
         transparent
         onRequestClose={closeModal}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Pressable
-          className="flex-1 bg-black/40"
+          style={{ flex: 1 }}
+          className="bg-black/40"
           onPress={closeModal}
         />
         <View
@@ -342,6 +564,76 @@ export default function WorkoutsScreen() {
                 autoFocus={!editingId}
                 returnKeyType="done"
               />
+
+              {/* Category input */}
+              <Text className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                Category{' '}
+                <Text style={{ fontSize: 11, textTransform: 'none', fontWeight: '400', color: mutedColor }}>
+                  (optional)
+                </Text>
+              </Text>
+              <TextInput
+                value={category}
+                onChangeText={text => {
+                  setCategory(text);
+                  setCategoryDropdownOpen(true);
+                }}
+                onFocus={() => setCategoryDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setCategoryDropdownOpen(false), 150)}
+                placeholder="e.g. Chest, Legs, Cardio…"
+                placeholderTextColor={placeholderColor}
+                returnKeyType="done"
+                style={{
+                  backgroundColor: inputBg,
+                  color: inputColor,
+                  borderRadius: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 13,
+                  fontSize: 14,
+                  marginBottom: 4,
+                }}
+              />
+
+              {/* Category suggestions */}
+              {categoryDropdownOpen && (() => {
+                const q = category.trim().toLowerCase();
+                const suggestions = existingCategories.filter(c =>
+                  c.toLowerCase().includes(q),
+                );
+                if (suggestions.length === 0) return null;
+                return (
+                  <View
+                    style={{
+                      backgroundColor: isDark ? '#1a1a1a' : '#fff',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: borderColor,
+                      marginBottom: 4,
+                      overflow: 'hidden',
+                    }}>
+                    {suggestions.map((cat, idx) => (
+                      <TouchableOpacity
+                        key={cat}
+                        onPress={() => {
+                          setCategory(cat);
+                          setCategoryDropdownOpen(false);
+                        }}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 13,
+                          borderTopWidth: idx === 0 ? 0 : 1,
+                          borderTopColor: borderColor,
+                        }}>
+                        <Text style={{ color: isDark ? '#a3a3a3' : '#525252', fontSize: 14 }}>
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })()}
+
+              <View style={{ marginBottom: 16 }} />
 
               {/* Selected units */}
               {selectedUnits.length > 0 && (
@@ -478,6 +770,7 @@ export default function WorkoutsScreen() {
               </TouchableOpacity>
           </ScrollView>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <AlertDialog
@@ -622,6 +915,7 @@ export default function WorkoutsScreen() {
 
       {/* Reset confirmation modal */}
       <Modal visible={resetOpen} transparent animationType="fade" onRequestClose={() => setResetOpen(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 }}>
           <View style={{ backgroundColor: sheetBg, borderRadius: 20, padding: 24 }}>
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#ef4444', marginBottom: 8 }}>
@@ -634,17 +928,33 @@ export default function WorkoutsScreen() {
             <View style={{
               backgroundColor: isDark ? '#1a1a1a' : '#fef2f2',
               borderRadius: 12,
-              padding: 16,
+              paddingVertical: 16,
+              paddingHorizontal: 20,
               marginBottom: 20,
               alignItems: 'center',
-              gap: 6,
+              gap: 8,
             }}>
               <Text style={{ fontSize: 12, color: isDark ? '#a3a3a3' : '#525252' }}>
                 Type this number to confirm:
               </Text>
-              <Text style={{ fontSize: 36, fontWeight: '800', color: '#ef4444', letterSpacing: 8 }}>
-                {resetCode}
-              </Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {resetCode.split('').map((digit, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      width: 44,
+                      height: 52,
+                      borderRadius: 10,
+                      backgroundColor: isDark ? '#2a2a2a' : '#fecaca',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                    <Text style={{ fontSize: 28, fontWeight: '800', color: '#ef4444' }}>
+                      {digit}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
 
             <TextInput
@@ -679,21 +989,26 @@ export default function WorkoutsScreen() {
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
                 onPress={() => setResetOpen(false)}
-                style={{ flex: 1, backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5', borderRadius: 12, paddingVertical: 13, alignItems: 'center' }}>
+                disabled={resetting}
+                style={{ flex: 1, backgroundColor: isDark ? '#1a1a1a' : '#f5f5f5', borderRadius: 12, paddingVertical: 13, alignItems: 'center', opacity: resetting ? 0.4 : 1 }}>
                 <Text style={{ color: isDark ? '#a3a3a3' : '#525252', fontSize: 14, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={confirmReset}
-                disabled={resetInput.length !== 4}
+                disabled={resetInput.length !== 4 || resetting}
                 style={{
                   flex: 1, backgroundColor: '#ef4444', borderRadius: 12, paddingVertical: 13, alignItems: 'center',
-                  opacity: resetInput.length !== 4 ? 0.4 : 1,
+                  opacity: (resetInput.length !== 4 || resetting) ? 0.4 : 1,
                 }}>
-                <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '700' }}>Reset Everything</Text>
+                {resetting
+                  ? <ActivityIndicator size="small" color="#ffffff" />
+                  : <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '700' }}>Reset Everything</Text>
+                }
               </TouchableOpacity>
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
