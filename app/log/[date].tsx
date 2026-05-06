@@ -4,6 +4,8 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { deleteWorkoutLog, getExercises, getWorkoutLog, saveWorkoutLog, getAllWorkoutLogs } from '@/lib/storage';
 import type { Exercise, ExerciseLog, SetEntry } from '@/lib/types';
 import { formatDisplayDate, parseDateKey } from '@/lib/utils';
+import { useKeepAwake } from 'expo-keep-awake';
+import { createAudioPlayer } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   ChevronDownIcon,
@@ -11,11 +13,13 @@ import {
   ChevronUpIcon,
   PlusIcon,
   Trash2Icon,
+  Volume2Icon,
+  VolumeXIcon,
 } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  BackHandler,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -28,6 +32,7 @@ import { useUniwind } from 'uniwind';
 type LogData = Record<string, SetEntry[]>;
 
 export default function LogScreen() {
+  useKeepAwake();
   const { date } = useLocalSearchParams<{ date: string }>();
   const { theme } = useUniwind();
   const isDark = theme === 'dark';
@@ -39,8 +44,15 @@ export default function LogScreen() {
   const [saving, setSaving] = useState(false);
   const [clearDialog, setClearDialog] = useState(false);
   const [legendDialog, setLegendDialog] = useState(false);
+  const [unsavedDialog, setUnsavedDialog] = useState(false);
+  const [tickEnabled, setTickEnabled] = useState(false);
   const [prevLogs, setPrevLogs] = useState<Record<string, ExerciseLog>>({});
   const logDataRef = useRef<LogData>({});
+  const initialDataRef = useRef<string>('');
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
+  const firstFocusedRef = useRef(false);
+  const tickPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Keep ref in sync for use inside closures
   useEffect(() => {
@@ -67,6 +79,9 @@ export default function LogScreen() {
         }
         setLogData(data);
         setExpanded(expandedSet);
+        initialDataRef.current = JSON.stringify(data);
+      } else {
+        initialDataRef.current = JSON.stringify({});
       }
 
       // Compute prevLogs: for each exercise, find the most recent log before `date`
@@ -170,6 +185,82 @@ export default function LogScreen() {
     router.back();
   }
 
+  const isDirty = useCallback(() => {
+    return JSON.stringify(logData) !== initialDataRef.current;
+  }, [logData]);
+
+  const handleBack = useCallback(() => {
+    if (isDirty()) {
+      setUnsavedDialog(true);
+      return true;
+    }
+    router.back();
+    return true;
+  }, [isDirty]);
+
+  // Hardware back button (Android)
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => sub.remove();
+  }, [handleBack]);
+
+  // Tick sound: create/destroy player when toggle changes; tick every second
+  useEffect(() => {
+    if (!tickEnabled) {
+      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
+      tickIntervalRef.current = null;
+      if (tickPlayerRef.current) {
+        tickPlayerRef.current.remove();
+        tickPlayerRef.current = null;
+      }
+      return;
+    }
+    try {
+      tickPlayerRef.current = createAudioPlayer(require('../../assets/sounds/tick.wav'));
+    } catch (e) {
+      // ignore
+    }
+    tickIntervalRef.current = setInterval(() => {
+      const p = tickPlayerRef.current;
+      if (!p) return;
+      try {
+        p.seekTo(0);
+        p.play();
+      } catch {}
+    }, 1000);
+    return () => {
+      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
+      tickIntervalRef.current = null;
+      if (tickPlayerRef.current) {
+        tickPlayerRef.current.remove();
+        tickPlayerRef.current = null;
+      }
+    };
+  }, [tickEnabled]);
+
+  // Auto-focus first empty input once exercises are loaded and any are expanded
+  useEffect(() => {
+    if (loading || firstFocusedRef.current) return;
+    for (const ex of exercises) {
+      const sets = logData[ex.id];
+      if (!sets || sets.length === 0) continue;
+      for (let si = 0; si < sets.length; si++) {
+        for (const u of ex.units) {
+          const v = sets[si][u.id]?.trim();
+          if (!v) {
+            const key = `${ex.id}::${si}::${u.id}`;
+            const ref = inputRefs.current[key];
+            if (ref) {
+              ref.focus();
+              firstFocusedRef.current = true;
+              return;
+            }
+          }
+        }
+      }
+    }
+  }, [loading, exercises, logData]);
+
   // Colors
   const iconColor = isDark ? '#e5e5e5' : '#171717';
   const mutedColor = isDark ? '#a3a3a3' : '#525252';
@@ -209,7 +300,7 @@ export default function LogScreen() {
           style={{ borderBottomWidth: 1, borderBottomColor: borderColor }}
           className="flex-row items-center justify-between px-4 py-3">
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleBack}
             className="flex-row items-center gap-1 py-1">
             <ChevronLeftIcon size={20} color={iconColor} />
             <Text className="text-sm font-medium text-foreground">Back</Text>
@@ -226,7 +317,16 @@ export default function LogScreen() {
             )}
           </View>
 
-          <ThemeToggle />
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => setTickEnabled(v => !v)}
+              className="w-9 h-9 items-center justify-center rounded-full">
+              {tickEnabled
+                ? <Volume2Icon size={20} color={isDark ? '#6366f1' : '#6366f1'} />
+                : <VolumeXIcon size={20} color={isDark ? '#e5e5e5' : '#171717'} />}
+            </TouchableOpacity>
+            <ThemeToggle />
+          </View>
         </View>
 
         {/* Exercise list */}
@@ -253,6 +353,7 @@ export default function LogScreen() {
               );
 
               const prevEntry = prevLogs[ex.id];
+              const missed = !!prevEntry && filledSets.length === 0;
 
               return (
                 <View
@@ -264,26 +365,20 @@ export default function LogScreen() {
                     activeOpacity={0.7}
                     className="flex-row items-center justify-between px-4 py-3.5">
                     <View className="flex-1">
-                      <Text className="text-sm font-semibold text-foreground">{ex.name}</Text>
+                      <Text style={missed ? { color: '#ef4444', fontSize: 14, fontWeight: '600' } : undefined} className={missed ? '' : 'text-sm font-semibold text-foreground'}>
+                        {ex.name}
+                      </Text>
                       <Text style={{ color: mutedColor, fontSize: 12 }} className="mt-0.5">
                         {ex.units.map(u => u.name).join(' · ')}
                       </Text>
                       {prevEntry && (() => {
-                        const setCount = prevEntry.sets.length;
                         const stats = ex.units.map(u => {
                           const vals = prevEntry.sets.map(s => parseFloat(s[u.id] ?? '') || 0);
-                          const max = Math.max(...vals);
                           const total = vals.reduce((a, b) => a + b, 0);
-                          return { name: u.name.toLowerCase(), max, total };
+                          return { name: u.name.toLowerCase(), total };
                         }).filter(s => s.total > 0);
                         if (stats.length === 0) return null;
-                        const parts = [
-                          `× ${setCount} sets`,
-                          ...stats.flatMap(s => [
-                            `↑ ${s.max} ${s.name}`,
-                            `∑ ${s.total} ${s.name}`,
-                          ]),
-                        ];
+                        const parts = stats.map(s => `∑ ${s.total} ${s.name}`);
                         return (
                           <TouchableOpacity onPress={() => setLegendDialog(true)} activeOpacity={0.6} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                             <Text style={{ color: isDark ? '#6366f1' : '#6366f1', fontSize: 12, fontWeight: '500', marginTop: 4, lineHeight: 18 }}>
@@ -339,30 +434,42 @@ export default function LogScreen() {
 
                             {/* Unit label + input per column */}
                             <View style={{ flexDirection: 'row', gap: 10 }}>
-                              {ex.units.map(u => (
-                                <View key={u.id} style={{ flex: 1 }}>
-                                  <Text style={{ color: mutedColor, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>
-                                    {u.name}
-                                  </Text>
-                                  <TextInput
-                                    value={set[u.id] ?? ''}
-                                    onChangeText={val => updateSet(ex.id, si, u.id, val)}
-                                    keyboardType="decimal-pad"
-                                    placeholder="—"
-                                    placeholderTextColor={placeholderColor}
-                                    style={{
-                                      backgroundColor: inputBg,
-                                      color: inputColor,
-                                      borderRadius: 10,
-                                      paddingHorizontal: 10,
-                                      paddingVertical: 11,
-                                      fontSize: 18,
-                                      fontWeight: '700',
-                                      textAlign: 'center',
-                                    }}
-                                  />
-                                </View>
-                              ))}
+                              {ex.units.map(u => {
+                                const raw = set[u.id] ?? '';
+                                const num = parseFloat(raw);
+                                const prevMax = prevEntry
+                                  ? Math.max(...prevEntry.sets.map(s => parseFloat(s[u.id] ?? '') || 0), 0)
+                                  : 0;
+                                let textColor = inputColor;
+                                if (raw.trim() !== '' && !isNaN(num) && prevMax > 0) {
+                                  textColor = num >= prevMax ? '#22c55e' : '#ef4444';
+                                }
+                                return (
+                                  <View key={u.id} style={{ flex: 1 }}>
+                                    <Text style={{ color: mutedColor, fontSize: 12, fontWeight: '600', marginBottom: 6 }}>
+                                      {u.name}
+                                    </Text>
+                                    <TextInput
+                                      ref={r => { inputRefs.current[`${ex.id}::${si}::${u.id}`] = r; }}
+                                      value={raw}
+                                      onChangeText={val => updateSet(ex.id, si, u.id, val)}
+                                      keyboardType="decimal-pad"
+                                      placeholder="—"
+                                      placeholderTextColor={placeholderColor}
+                                      style={{
+                                        backgroundColor: inputBg,
+                                        color: textColor,
+                                        borderRadius: 10,
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 11,
+                                        fontSize: 18,
+                                        fontWeight: '700',
+                                        textAlign: 'center',
+                                      }}
+                                    />
+                                  </View>
+                                );
+                              })}
                             </View>
                           </View>
                         ))}
@@ -445,11 +552,24 @@ export default function LogScreen() {
       <AlertDialog
         open={legendDialog}
         onOpenChange={setLegendDialog}
-        title="What do these mean?"
-        description={`These stats are from your last session for this exercise.\n\n× sets — how many sets you did\n↑ value — your best (highest) value in a single set\n∑ value — your total across all sets`}
+        title="What does this mean?"
+        description={`This is your total from the last session for this exercise.\n\n∑ value — your total across all sets last time`}
         cancelLabel={null}
         actionLabel="Got it"
         onAction={() => setLegendDialog(false)}
+      />
+
+      <AlertDialog
+        open={unsavedDialog}
+        onOpenChange={setUnsavedDialog}
+        title="Discard changes?"
+        description="You have unsaved changes. Leave without saving?"
+        cancelLabel="Keep editing"
+        actionLabel="Discard"
+        onAction={() => {
+          setUnsavedDialog(false);
+          router.back();
+        }}
       />
     </SafeAreaView>
   );

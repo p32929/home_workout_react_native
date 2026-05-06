@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { CalendarDaysIcon, DumbbellIcon, TrendingUpIcon } from 'lucide-react-native';
+import { CalendarDaysIcon, DumbbellIcon, SettingsIcon, TrendingUpIcon } from 'lucide-react-native';
 import { useUniwind } from 'uniwind';
 
 export default function TabLayout() {
@@ -32,9 +32,16 @@ export default function TabLayout() {
         },
       }}>
       <Tabs.Screen
+        name="workouts"
+        options={{
+          title: 'Exercises',
+          tabBarIcon: ({ color }) => <DumbbellIcon size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
-          title: 'Calendar',
+          title: 'Track',
           tabBarIcon: ({ color }) => <CalendarDaysIcon size={22} color={color} />,
         }}
       />
@@ -46,10 +53,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="workouts"
+        name="settings"
         options={{
-          title: 'Exercises',
-          tabBarIcon: ({ color }) => <DumbbellIcon size={22} color={color} />,
+          title: 'Settings',
+          tabBarIcon: ({ color }) => <SettingsIcon size={22} color={color} />,
         }}
       />
     </Tabs>
