@@ -211,16 +211,26 @@ export default function LogScreen() {
     return () => sub.remove();
   }, [handleBack]);
 
+  // Fully stop and release the tick player. On Android, remove() alone does NOT
+  // halt a looping player — it keeps ticking until the app is killed — so we
+  // pause() and turn looping off first. Each step is guarded so one throwing
+  // can't leave audio running.
+  function stopTick() {
+    const p = tickPlayerRef.current;
+    if (!p) return;
+    tickPlayerRef.current = null;
+    try { p.loop = false; } catch {}
+    try { p.pause(); } catch {}
+    try { p.remove(); } catch {}
+  }
+
   // Tick sound: the source file is exactly 1.000s long (a click at the start,
   // silence for the rest), so looping it natively makes the click fire once per
   // second with sample-accurate spacing — steadier than a JS setInterval, which
   // drifts. Use this to count seconds in your head.
   useEffect(() => {
     if (!tickEnabled) {
-      if (tickPlayerRef.current) {
-        tickPlayerRef.current.remove();
-        tickPlayerRef.current = null;
-      }
+      stopTick();
       return;
     }
     try {
@@ -234,12 +244,8 @@ export default function LogScreen() {
     } catch (e) {
       // ignore
     }
-    return () => {
-      if (tickPlayerRef.current) {
-        tickPlayerRef.current.remove();
-        tickPlayerRef.current = null;
-      }
-    };
+    return stopTick;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickEnabled]);
 
   // Auto-focus first empty input once exercises are loaded and any are expanded
