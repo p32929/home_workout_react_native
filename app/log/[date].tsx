@@ -5,7 +5,7 @@ import { deleteWorkoutLog, getExercises, getWorkoutLog, saveWorkoutLog, getAllWo
 import type { Exercise, ExerciseLog, SetEntry } from '@/lib/types';
 import { formatDisplayDate, parseDateKey } from '@/lib/utils';
 import { useKeepAwake } from 'expo-keep-awake';
-import { createAudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   ChevronDownIcon,
@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackHandler,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -49,10 +50,10 @@ export default function LogScreen() {
   const [prevLogs, setPrevLogs] = useState<Record<string, ExerciseLog>>({});
   const logDataRef = useRef<LogData>({});
   const initialDataRef = useRef<string>('');
+  const createdAtRef = useRef<string | null>(null);
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const firstFocusedRef = useRef(false);
   const tickPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Keep ref in sync for use inside closures
   useEffect(() => {
@@ -69,6 +70,7 @@ export default function LogScreen() {
       setExercises(exs);
 
       if (existingLog) {
+        createdAtRef.current = existingLog.createdAt ?? null;
         const data: LogData = {};
         const expandedSet = new Set<string>();
         for (const el of existingLog.exercises) {
@@ -173,7 +175,12 @@ export default function LogScreen() {
       await deleteWorkoutLog(date);
     } else {
       const now = new Date().toISOString();
-      await saveWorkoutLog({ date, exercises: logExercises, createdAt: now, updatedAt: now });
+      await saveWorkoutLog({
+        date,
+        exercises: logExercises,
+        createdAt: createdAtRef.current ?? now,
+        updatedAt: now,
+      });
     }
 
     setSaving(false);
@@ -204,11 +211,12 @@ export default function LogScreen() {
     return () => sub.remove();
   }, [handleBack]);
 
-  // Tick sound: create/destroy player when toggle changes; tick every second
+  // Tick sound: the source file is exactly 1.000s long (a click at the start,
+  // silence for the rest), so looping it natively makes the click fire once per
+  // second with sample-accurate spacing — steadier than a JS setInterval, which
+  // drifts. Use this to count seconds in your head.
   useEffect(() => {
     if (!tickEnabled) {
-      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-      tickIntervalRef.current = null;
       if (tickPlayerRef.current) {
         tickPlayerRef.current.remove();
         tickPlayerRef.current = null;
@@ -216,21 +224,17 @@ export default function LogScreen() {
       return;
     }
     try {
-      tickPlayerRef.current = createAudioPlayer(require('../../assets/sounds/tick.wav'));
+      // Play at full volume even if the phone is on silent
+      setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+      const player = createAudioPlayer(require('../../assets/sounds/tick.wav'));
+      player.volume = 1.0;
+      player.loop = true;
+      player.play();
+      tickPlayerRef.current = player;
     } catch (e) {
       // ignore
     }
-    tickIntervalRef.current = setInterval(() => {
-      const p = tickPlayerRef.current;
-      if (!p) return;
-      try {
-        p.seekTo(0);
-        p.play();
-      } catch {}
-    }, 1000);
     return () => {
-      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-      tickIntervalRef.current = null;
       if (tickPlayerRef.current) {
         tickPlayerRef.current.remove();
         tickPlayerRef.current = null;
@@ -294,7 +298,7 @@ export default function LogScreen() {
     <SafeAreaView style={{ flex: 1 }} className="bg-background" edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior="padding">
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Header */}
         <View
           style={{ borderBottomWidth: 1, borderBottomColor: borderColor }}

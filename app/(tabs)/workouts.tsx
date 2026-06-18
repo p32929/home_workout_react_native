@@ -10,6 +10,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   TextInput,
@@ -168,6 +169,7 @@ export default function WorkoutsScreen() {
   const [unitDropdownOpen, setUnitDropdownOpen] = useState(false);
   const [category, setCategory] = useState('');
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   // Drag-to-reorder
   const exercisesRef = useRef<Exercise[]>([]);
@@ -241,6 +243,32 @@ export default function WorkoutsScreen() {
     setCategoryDropdownOpen(false);
   }
 
+  // True if the form has content the user would lose by closing the sheet.
+  function isFormDirty() {
+    const n = name.trim();
+    const cat = category.trim();
+    const pending = customUnitText.trim();
+    if (!editingId) {
+      return n !== '' || selectedUnits.length > 0 || cat !== '' || pending !== '';
+    }
+    const orig = exercises.find(e => e.id === editingId);
+    if (!orig) return true;
+    const sameUnits =
+      orig.units.length === selectedUnits.length &&
+      orig.units.every(
+        (u, i) => selectedUnits[i]?.id === u.id && selectedUnits[i]?.name === u.name,
+      );
+    return n !== orig.name || cat !== (orig.category ?? '') || pending !== '' || !sameUnits;
+  }
+
+  function attemptClose() {
+    if (isFormDirty()) {
+      setDiscardOpen(true);
+      return;
+    }
+    closeModal();
+  }
+
   function removeUnit(id: string) {
     setSelectedUnits(prev => prev.filter(u => u.id !== id));
   }
@@ -282,9 +310,19 @@ export default function WorkoutsScreen() {
     let updated: Exercise[];
 
     if (editingId) {
+      // Preserve the original unit IDs (matched by name) so existing workout
+      // logs and progress charts keep pointing at the right column. A unit's
+      // saved data is keyed by its ID, so reusing the old ID keeps history.
+      const original = all.find(e => e.id === editingId);
+      const unitsWithStableIds = units.map(u => {
+        const prior = original?.units.find(
+          o => o.name.toLowerCase() === u.name.toLowerCase(),
+        );
+        return prior ? { ...u, id: prior.id } : u;
+      });
       updated = all.map(e =>
         e.id === editingId
-          ? { ...e, name: trimmedName, units, category: trimmedCategory || undefined }
+          ? { ...e, name: trimmedName, units: unitsWithStableIds, category: trimmedCategory || undefined }
           : e,
       );
     } else {
@@ -333,19 +371,41 @@ export default function WorkoutsScreen() {
 
   const handleFinalizeDrag = useCallback((exId: string, translationY: number) => {
     const exs = exercisesRef.current;
-    const currentIndex = exs.findIndex(e => e.id === exId);
-    if (currentIndex < 0) return;
+    const dragged = exs.find(e => e.id === exId);
+    if (!dragged) return;
+
+    // Reorder ONLY within the dragged item's own category section. The list is
+    // rendered grouped by category, so a flat-array move would land on the wrong
+    // row (and the item would snap back to its group anyway).
+    const cat = dragged.category ?? null;
+    const groupIndices: number[] = [];
+    exs.forEach((e, i) => {
+      if ((e.category ?? null) === cat) groupIndices.push(i);
+    });
+    const siblings = groupIndices.map(i => exs[i]);
+    const fromLocal = siblings.findIndex(e => e.id === exId);
+    if (fromLocal < 0) return;
+
     const heights = Object.values(itemHeightsRef.current);
     const avg =
       heights.length > 0
-        ? heights.reduce((a, b) => a + b, 0) / heights.length + 12
+        ? heights.reduce((a, b) => a + b, 0) / heights.length + 10
         : 88;
     const steps = Math.round(translationY / avg);
     if (steps === 0) return;
-    const targetIndex = Math.max(0, Math.min(exs.length - 1, currentIndex + steps));
+
+    const toLocal = Math.max(0, Math.min(siblings.length - 1, fromLocal + steps));
+    if (toLocal === fromLocal) return;
+
+    const reordered = [...siblings];
+    const [moved] = reordered.splice(fromLocal, 1);
+    reordered.splice(toLocal, 0, moved);
+
+    // Write the reordered siblings back into the same slots they occupied.
     const newExs = [...exs];
-    const [removed] = newExs.splice(currentIndex, 1);
-    newExs.splice(targetIndex, 0, removed);
+    groupIndices.forEach((idx, k) => {
+      newExs[idx] = reordered[k];
+    });
     setExercises(newExs);
     saveExercises(newExs);
   }, []);
@@ -435,12 +495,12 @@ export default function WorkoutsScreen() {
         visible={modalVisible}
         animationType="slide"
         transparent
-        onRequestClose={closeModal}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        onRequestClose={attemptClose}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable
           style={{ flex: 1 }}
           className="bg-black/40"
-          onPress={closeModal}
+          onPress={attemptClose}
         />
         <View
           style={{ backgroundColor: sheetBg, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
@@ -454,7 +514,7 @@ export default function WorkoutsScreen() {
             <Text className="text-lg font-bold text-foreground">
               {editingId ? 'Edit Exercise' : 'New Exercise'}
             </Text>
-            <TouchableOpacity onPress={closeModal} className="p-1">
+            <TouchableOpacity onPress={attemptClose} className="p-1">
               <XIcon size={20} color={iconColor} />
             </TouchableOpacity>
           </View>
@@ -703,6 +763,19 @@ export default function WorkoutsScreen() {
         cancelLabel="Cancel"
         actionLabel="Delete"
         onAction={confirmDelete}
+      />
+
+      <AlertDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title="Discard changes?"
+        description="You have unsaved changes. Leave without saving?"
+        cancelLabel="Keep editing"
+        actionLabel="Discard"
+        onAction={() => {
+          setDiscardOpen(false);
+          closeModal();
+        }}
       />
 
     </SafeAreaView>

@@ -4,7 +4,7 @@ import { DAYS_SHORT, MONTHS } from '@/lib/constants';
 import { getAllWorkoutLogs, getExercises } from '@/lib/storage';
 import { formatDateKey } from '@/lib/utils';
 import { useFocusEffect, router } from 'expo-router';
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react-native';
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,8 +16,8 @@ export default function CalendarScreen() {
   const isDark = theme === 'dark';
 
   const now = new Date();
-  const todayKey = formatDateKey(now);
 
+  const [todayKey, setTodayKey] = useState(() => formatDateKey(new Date()));
   const [currentMonth, setCurrentMonth] = useState(
     new Date(now.getFullYear(), now.getMonth(), 1),
   );
@@ -27,6 +27,9 @@ export default function CalendarScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Recompute "today" on every focus so it stays correct if the app was
+      // left open past midnight.
+      setTodayKey(formatDateKey(new Date()));
       Promise.all([getAllWorkoutLogs(), getExercises()]).then(([logs, exs]) => {
         setLoggedDates(new Set(Object.keys(logs)));
         setHasExercises(exs.length > 0);
@@ -94,6 +97,17 @@ export default function CalendarScreen() {
             </TouchableOpacity>
           </View>
           <ThemeToggle />
+        </View>
+
+        {/* Quick log today */}
+        <View className="px-5 mb-5">
+          <TouchableOpacity
+            onPress={() => onDayPress(todayKey)}
+            activeOpacity={0.85}
+            className="flex-row items-center justify-center gap-2 rounded-2xl bg-foreground py-4">
+            <PlusIcon size={18} color={isDark ? '#0a0a0a' : '#ffffff'} />
+            <Text className="text-base font-bold text-background">Log Today's Workout</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Day-of-week headers */}

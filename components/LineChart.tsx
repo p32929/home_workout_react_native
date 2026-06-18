@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
+import { Platform } from 'react-native';
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+
+// react-native-svg routes onPress through RN's responder system, which on web
+// forwards unknown onResponder* props to the DOM <rect>/<circle> and spams
+// console.error (shown as a red dev overlay). Only wire taps on native, where
+// the tooltip works; on web the chart renders cleanly but isn't tappable.
+const tap = (fn: () => void) => (Platform.OS === 'web' ? {} : { onPress: fn });
 
 export interface ChartPoint {
   key: string;    // YYYY-MM-DD (for sorting & alignment)
@@ -101,7 +108,7 @@ export function LineChart({ series, width, height = 220, isDark = false }: Props
   return (
     <Svg width={width} height={height}>
       {/* Tap background to dismiss tooltip */}
-      <Rect x={0} y={0} width={width} height={height} fill="transparent" onPress={() => setTooltip(null)} />
+      <Rect x={0} y={0} width={width} height={height} fill="transparent" {...tap(() => setTooltip(null))} />
 
       {/* Y grid + labels */}
       {yTicks.map((tick, i) => (
@@ -145,10 +152,10 @@ export function LineChart({ series, width, height = 220, isDark = false }: Props
               fill={active ? s.color : dotFill}
               stroke={s.color}
               strokeWidth={2}
-              onPress={() => {
+              {...tap(() => {
                 if (active) { setTooltip(null); return; }
                 setTooltip({ cx, cy, value: p.value, label: p.label, name: s.name, color: s.color });
-              }}
+              })}
             />
           );
         }),

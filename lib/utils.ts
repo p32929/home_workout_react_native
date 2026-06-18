@@ -66,8 +66,10 @@ export function computeStreak(dates: string[]): { current: number; best: number 
     }
   }
 
-  // Best streak (sliding window on sorted dates)
-  let best = current;
+  // Best streak (sliding window on sorted dates).
+  // At least 1 since we have one or more logged days, and never less than the
+  // current streak.
+  let best = Math.max(current, 1);
   let streak = 1;
   for (let i = 1; i < sorted.length; i++) {
     const prev = parseDateKey(sorted[i - 1]);

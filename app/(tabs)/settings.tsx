@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -366,7 +367,7 @@ export default function SettingsScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => setResetOpen(false)}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View
             style={{
               flex: 1,
