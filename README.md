@@ -1,73 +1,78 @@
-# Minimal Uniwind Template
+# home_workout_react_native
 
-This is a [React Native](https://reactnative.dev/) project built with [Expo](https://expo.dev/) and [React Native Reusables](https://reactnativereusables.com).
+(WIP) A personal workout tracker — log your sets each day, look back at a calendar of what you actually did, and watch the numbers on a chart. Built with React Native, Expo and Uniwind. Everything stays on the device.
 
-It was initialized using the following command, then the `Minimal (Uniwind)` template was selected when prompted:
+I vibe-coded this for my own use, so it's shaped around how I train, not around being a product.
 
-```bash
-npx @react-native-reusables/cli@latest init
+## Features
+
+- **Custom exercises with custom units** — reps, kg, seconds, distance, whatever you define per exercise
+- **Daily log** — one entry per day, as many sets per exercise as you like
+- **Calendar view** of every day you trained
+- **Stats** with a line chart per exercise
+- **Backup and restore** your data (`lib/backup.ts`)
+- **Light / dark theme** toggle
+- **Offline and local-only** — AsyncStorage on the device, no account, no server
+
+## Screens
+
+```
+app/(tabs)/workouts.tsx   define and manage exercises
+app/(tabs)/calendar.tsx   which days you trained
+app/(tabs)/stats.tsx      charts per exercise
+app/(tabs)/settings.tsx   theme, backup and restore
+app/log/[date].tsx        log or edit one day
 ```
 
-## Getting Started
-
-To run the development server:
+## Getting started
 
 ```bash
-    npm run dev
-    # or
-    yarn dev
-    # or
-    pnpm dev
-    # or
-    bun dev
+git clone https://github.com/p32929/home_workout_react_native.git
+cd home_workout_react_native
+npm install
+npm run dev        # then scan the QR with Expo Go
 ```
 
-This will start the Expo Dev Server. Open the app in:
-
-- **iOS**: press `i` to launch in the iOS simulator _(Mac only)_
-- **Android**: press `a` to launch in the Android emulator
-- **Web**: press `w` to run in a browser
-
-You can also scan the QR code using the [Expo Go](https://expo.dev/go) app on your device. This project fully supports running in Expo Go for quick testing on physical devices.
-
-## Adding components
-
-You can add more reusable components using the CLI:
+Or straight onto a device/emulator:
 
 ```bash
-npx react-native-reusables/cli@latest add [...components]
+npm run android
+npm run ios
+npm run web
 ```
 
-> e.g. `npx react-native-reusables/cli@latest add input textarea`
+Built from the [React Native Reusables](https://reactnativereusables.com) `Minimal (Uniwind)` template.
 
-If you don't specify any component names, you'll be prompted to select which components to add interactively. Use the `--all` flag to install all available components at once.
+## Contributing
 
-## Project Features
+Contributions are warmly welcomed and greatly appreciated! Whether it's a bug fix, new feature, or improvement, your input helps make this project better for everyone.
 
-- ⚛️ Built with [Expo Router](https://expo.dev/router)
-- 🎨 Styled with [Tailwind CSS](https://tailwindcss.com/) via [Uniwind](https://uniwind.dev/)
-- 📦 UI powered by [React Native Reusables](https://github.com/founded-labs/react-native-reusables)
-- 🚀 New Architecture enabled
-- 🔥 Edge to Edge enabled
-- 📱 Runs on iOS, Android, and Web
+Before submitting a pull request, please:
 
-## Learn More
+1. Create an issue describing the feature or bug fix you'd like to work on
+2. Wait for discussion and approval to ensure alignment with project goals
+3. Fork the repository and create your feature branch
+4. Submit your pull request with a clear description of changes
 
-To dive deeper into the technologies used:
+This approach helps avoid duplicate efforts and ensures smooth collaboration. Thank you for considering contributing!
 
-- [React Native Docs](https://reactnative.dev/docs/getting-started)
-- [Expo Docs](https://docs.expo.dev/)
-- [Uniwind Docs](https://docs.uniwind.dev/)
-- [React Native Reusables](https://reactnativereusables.com)
+## Share
 
-## Deploy with EAS
+Sharing this repository with your friends is just one click away from here
 
-The easiest way to deploy your app is with [Expo Application Services (EAS)](https://expo.dev/eas).
-
-- [EAS Build](https://docs.expo.dev/build/introduction/)
-- [EAS Updates](https://docs.expo.dev/eas-update/introduction/)
-- [EAS Submit](https://docs.expo.dev/submit/introduction/)
+[![facebook](https://user-images.githubusercontent.com/6418354/179013321-ac1d1452-0689-493f-9066-940cf2302b6e.png)](https://www.facebook.com/sharer/sharer.php?u=https://github.com/p32929/home_workout_react_native/)
+[![twitter](https://user-images.githubusercontent.com/6418354/179013351-7d8d6d1c-4ce2-46ab-bef8-4c4765a1b888.png)](https://twitter.com/intent/tweet?url=https://github.com/p32929/home_workout_react_native/)
+[![tumblr](https://user-images.githubusercontent.com/6418354/179013343-3111f55a-3b90-40c7-8487-9777348672b0.png)](https://www.tumblr.com/share?v=3&u=https://github.com/p32929/home_workout_react_native/)
+[![pocket](https://user-images.githubusercontent.com/6418354/179013334-b095c45f-becf-49f4-9ee1-5a731a9b1f85.png)](https://getpocket.com/save?url=https://github.com/p32929/home_workout_react_native/)
+[![pinterest](https://user-images.githubusercontent.com/6418354/179013331-44cd9206-11b1-4b65-becb-5863b61c828f.png)](https://pinterest.com/pin/create/button/?url=https://github.com/p32929/home_workout_react_native/)
+[![reddit](https://user-images.githubusercontent.com/6418354/179013338-7416ae3f-73ba-4522-86e1-1374d7082d22.png)](https://www.reddit.com/submit?url=https://github.com/p32929/home_workout_react_native/)
+[![linkedin](https://user-images.githubusercontent.com/6418354/179013327-ca7b7102-1da8-4b1c-858f-1a6e5f21bd70.png)](https://www.linkedin.com/shareArticle?mini=true&url=https://github.com/p32929/home_workout_react_native/)
+[![whatsapp](https://user-images.githubusercontent.com/6418354/179013353-f477fa0b-3e6f-4138-a357-c9991b23ff88.png)](https://api.whatsapp.com/send?text=https://github.com/p32929/home_workout_react_native/)
 
 ---
 
-If you enjoy using React Native Reusables, please consider giving it a ⭐ on [GitHub](https://github.com/founded-labs/react-native-reusables). Your support means a lot!
+## Support
+
+If this saved you time, you can buy me a coffee — it keeps these projects maintained and free.
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/p32929)
