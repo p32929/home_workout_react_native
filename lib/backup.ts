@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 import { getAllWorkoutLogs, getExercises, saveExercises } from './storage';
 import type { Exercise, WorkoutLog } from './types';
 import { formatDateKey } from './utils';
@@ -27,6 +28,15 @@ export async function exportData(what: 'exercises' | 'all'): Promise<void> {
 
   const json = JSON.stringify(data, null, 2);
   const filename = `workout-backup-${formatDateKey(new Date())}.json`;
+  if (Platform.OS === 'web') {
+    // No file system or share sheet in the browser: download the file instead.
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return;
+  }
   const path = `${FileSystem.cacheDirectory}${filename}`;
   await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
   await Sharing.shareAsync(path, {
@@ -45,9 +55,11 @@ export async function pickAndParseBackup(): Promise<BackupData> {
   if (result.canceled) throw new Error('cancelled');
 
   const uri = result.assets[0].uri;
-  const content = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  // In the browser the picked file is a blob/data URL that the file system module can't read.
+  const content =
+    Platform.OS === 'web'
+      ? await (await fetch(uri)).text()
+      : await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
 
   let data: BackupData;
   try {

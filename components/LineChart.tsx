@@ -86,11 +86,17 @@ export function LineChart({ series, width, height = 220, isDark = false }: Props
   }
 
   // Y axis: 4 ticks
-  const yTicks = [0, 0.33, 0.67, 1].map(t => displayMin + t * displayRange);
+  // Whole numbers once the range is wide enough, so the axis reads 20, 30, 40 instead of 18.6, 28.4.
+  const yTicks = [0, 0.33, 0.67, 1].map(t => {
+    const v = displayMin + t * displayRange;
+    return displayRange >= 6 ? Math.round(v) : v;
+  });
 
   // X axis: at most 5 labels, always include first and last
   const xStep = Math.max(1, Math.ceil(allKeys.length / 5));
-  const xLabelKeys = allKeys.filter((_, i) => i === 0 || i === allKeys.length - 1 || i % xStep === 0);
+  // Skip a regular label that would sit right next to the last one and overlap it.
+  const last = allKeys.length - 1;
+  const xLabelKeys = allKeys.filter((_, i) => i === 0 || i === last || (i % xStep === 0 && last - i >= xStep));
 
   // Tooltip positioning — clamp inside chart
   function tipX(cx: number) {

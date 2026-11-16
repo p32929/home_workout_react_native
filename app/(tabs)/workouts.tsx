@@ -438,9 +438,12 @@ export default function WorkoutsScreen() {
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 88 }}>
         {exercises.length === 0 ? (
           <View className="items-center justify-center py-24 gap-3">
-            <View className="w-16 h-16 rounded-full bg-secondary items-center justify-center">
+            <TouchableOpacity
+              onPress={openAdd}
+              accessibilityLabel="Add your first exercise"
+              className="w-16 h-16 rounded-full bg-secondary items-center justify-center">
               <PlusIcon size={28} color={placeholderColor} />
-            </View>
+            </TouchableOpacity>
             <Text className="text-base font-semibold text-foreground">No exercises yet</Text>
             <Text className="text-sm text-muted-foreground text-center px-8">
               Tap the + button to add your first exercise and define what you want to track.
