@@ -2,7 +2,7 @@
 
 A free workout tracker with no paywall, no account and no internet needed. Add your own exercises, log your sets each day, see the days you trained on a calendar, and watch your numbers grow on a chart. Everything stays on your device.
 
-**[Try it in your browser →](https://p32929.github.io/home_workout_react_native/)** &nbsp;·&nbsp; **[Download for Android →](https://github.com/p32929/p32929_openstore/releases/tag/my-workout-tracker)**
+**[Try it in your browser →](https://p32929.github.io/home_workout_react_native/)**
 
 <p align="center">
   <img src="docs/demo.gif" alt="Logging a workout, then the calendar and the stats" width="300">
