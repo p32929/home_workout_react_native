@@ -1,8 +1,8 @@
 # My Workout Tracker
 
-A free workout tracker with no paywall, no account and no internet needed. Add your own exercises, log your sets each day, see the days you trained on a calendar, and watch your numbers grow on a chart. Everything stays on your device.
+A free workout tracker for Android and iPhone, with no paywall, no account and no internet needed. Add your own exercises, log your sets each day, see the days you trained on a calendar, and watch your numbers grow on a chart. Everything stays on your device.
 
-**[Try it in your browser →](https://p32929.github.io/home_workout_react_native/)**
+**[Download for Android →](https://github.com/p32929/p32929_openstore/releases/tag/my-workout-tracker)** &nbsp;·&nbsp; **[Try it in your browser →](https://p32929.github.io/home_workout_react_native/)**
 
 <p align="center">
   <img src="docs/demo.gif" alt="Logging a workout, then the calendar and the stats" width="300">
@@ -48,6 +48,12 @@ I made this app just for myself. I needed a simple workout tracker, but almost e
 5. In **Settings**, use **Export Everything** now and then to keep a backup.
 
 In the browser version, your data is saved in that browser. Clearing the site's data deletes it, so export a backup first.
+
+## Get it
+
+1. **Android:** download the APK from the [download page](https://github.com/p32929/p32929_openstore/releases/tag/my-workout-tracker) and open it to install.
+2. **iPhone:** there is no download yet. You can run it on your iPhone from the source code with Expo Go, as shown below.
+3. **Web:** [open it in your browser](https://p32929.github.io/home_workout_react_native/).
 
 ## Run it yourself
 
