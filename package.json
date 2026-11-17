@@ -73,6 +73,7 @@
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@types/react": "~19.2.10",
+    "babel-preset-expo": "~55.0.18",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
     "typescript": "~5.9.2"
